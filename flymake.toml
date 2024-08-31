@@ -1,0 +1,7 @@
+[package]
+name = "flymake"
+version = "1.0"
+
+[dependencies]
+flylibc = { git="git@github.com:drewagislason/flylibc.git" }
+# flylibc = { path="../flylibc/" }
