@@ -98,7 +98,7 @@ void FlyMakePrintErr(fmkErr_t err, const char *szExtra)
       FlyMakePrintf("out of memory\n");
     break;
     case FMK_ERR_BAD_PATH:
-      FlyMakePrintf("invalid path or target %s\n", FlyStrNullOk(szExtra));
+      FlyMakePrintf("invalid path `%s`\n", FlyStrNullOk(szExtra));
     break;
     case FMK_ERR_BAD_PROG:
       FlyMakePrintf("'%s' is not a valid program\n", FlyStrNullOk(szExtra));
@@ -107,7 +107,7 @@ void FlyMakePrintErr(fmkErr_t err, const char *szExtra)
       FlyMakePrintf("no source files in folder %s\n", FlyStrNullOk(szExtra));
     break;
     case FMK_ERR_NOT_PROJECT:
-      FlyMakePrintf("path `%s` does not appear to be in a project\n", FlyStrNullOk(szExtra));
+      FlyMakePrintf("path `%s` does not appear to be in a project or is empty\n", FlyStrNullOk(szExtra));
     break;
     case FMK_ERR_NOT_SAME_ROOT:
       FlyMakePrintf("'%s' not in same root\n", FlyStrNullOk(szExtra));
@@ -149,18 +149,20 @@ fmkErr_t FlyMakeErrMem(void)
   @param    szErr     error string
   @return   column of error (1-n)
 *///-----------------------------------------------------------------------------------------------
-void FlyMakeErrToml(const flyMakeState_t *pState, const char *szToml, const char *szErr)
+fmkErr_t FlyMakeErrToml(const flyMakeState_t *pState, const char *szToml, const char *szErr)
 {
   unsigned    line, col;
   const char *szLine;
 
   // print error line
   line = FlyStrLinePos(pState->szTomlFile, szToml, &col);
-  FlyMakePrintf("%s%s:%u:%u: %s\n", pState->szRoot, g_szTomlFile, line, col, szErr);
+  FlyMakePrintf("%s%s:%u:%u: error: %s\n", pState->szRoot, g_szTomlFile, line, col, szErr);
 
   // print context
   szLine = FlyStrLineBeg(pState->szTomlFile, szToml);
   FlyMakePrintf("  %.*s\n", (unsigned)FlyStrLineLen(szLine), szLine);
   FlyMakePrintf("  %*s^\n", col - 1, "");
+
+  return FMK_ERR_CUSTOM;
 }
 

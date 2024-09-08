@@ -378,7 +378,7 @@ static fmkErr_t FlyMakeCmdBuild(flyMakeState_t *pState)
   int             i;
 
   FlyAssert(pState && pState->szRoot);
-  pState->nCompiled = 0;
+  pState->nCompiled = pState->nSrcFiles = 0;
 
   // recursively discover and build dependencies
   // results in a list of dependencies for the root project and updated pState->incs and ->libs
@@ -409,6 +409,8 @@ static fmkErr_t FlyMakeCmdBuild(flyMakeState_t *pState)
 
   if(err)
     FlyMakePrintErr(err, szErrExtra);
+  else if(pState->nSrcFiles == 0)
+    FlyMakePrintf("flymake warning: empty project\n");
   else if(pState->nCompiled == 0)
     FlyMakePrintf("# Everything is up to date\n");
 
@@ -647,6 +649,7 @@ int main(int argc, const char *argv[])
     { "--rl",    &state.opts.fRulesLib,     FLYCLI_BOOL },
     { "--rs",    &state.opts.fRulesSrc,     FLYCLI_BOOL },
     { "--rt",    &state.opts.fRulesTools,   FLYCLI_BOOL },
+    { "--user-guide", &state.opts.fUserGuide, FLYCLI_BOOL },
   };
   const flyCli_t cli =
   {
@@ -677,6 +680,14 @@ int main(int argc, const char *argv[])
   if(state.opts.fAll)
     state.opts.fRebuild = TRUE;
   m_debug = state.opts.debug;
+
+  // print the manual to the screen
+  if(state.opts.fUserGuide)
+  {
+    puts(g_szFlyMakeUserGuide);
+    exit(0);
+  }
+
   if(state.opts.fNoBuild)
   {
     if(!state.opts.verbose)
@@ -739,7 +750,7 @@ int main(int argc, const char *argv[])
       szPath = ".";
 
     // set up default rules for compiling C/C++ programs
-    state.pCompilerList = FlyMakeCompilerListDefault();
+    state.pCompilerList = FlyMakeCompilerListDefault(&state);
 
     // determine root folder from a target file/folder
     szRootFolder = FlyMakeTomlRootFind(szPath, state.pCompilerList, &err);

@@ -17,7 +17,6 @@ static const char m_szTomlFmtDefault[] =
   "[package]\n"
   "name = \"%s\"\n"
   "version = \"0.1.0\"\n"
-  "std = \"*\"\n"
   "\n"
   "[dependencies]\n"
   "# foo = { path=\"../foo/lib/foo.a\", inc=\"../foo/inc\" }\n"
@@ -43,7 +42,7 @@ const char g_szFmtArchive[]           = "ar -crs %s %s";
 static const char m_szExtsC[]         = ".c";
 static const char m_szDefCc[]         = "cc {in} -c {incs}{warn}{debug}-o {out}";
 static const char m_szDefLl[]         = "cc {in} {libs}{debug}-o {out}";
-static const char m_szDefCcDbg[]      = "-g -DDEBUG=1 ";
+static const char m_szDefCcDbg[]      = "-g -DDEBUG={n} ";  // see FmkAllocCcDbg()
 static const char m_szDefLlDbg[]      = "-g ";
 static const char m_szDefInc[]        = "-I";
 static const char m_szDefWarn[]       = "-Wall -Werror ";
@@ -79,7 +78,7 @@ flyMakeFolder_t     m_aDefFolders[]   =
 
 static const char  *m_aszRules[]      = { "--rl", "--rs", "--rt", NULL };
 static const char  m_szRuleInvalid[]  = "build rule must be one of \"--rl\", \"--rs\" or \"--rt\"";
-static const char  m_szFolderNotStr[] = "Folder must be in string form, e.g. \"folder\"";
+// static const char  m_szFolderNotStr[] = "Folder must be in string form, e.g. \"folder\"";
 
 /*-------------------------------------------------------------------------------------------------
   Allocate all found folders into the state
@@ -141,6 +140,21 @@ char * FlyMakeTomlKeyAlloc(const char *szTomlKey)
     FlyTomlKeyCpy(szName, szTomlKey, size);
 
   return szName;
+}
+
+/*-------------------------------------------------------------------------------------------------
+  Check the type. Should be string. If not, return error, set error message
+
+  @param  pState        state with flymake.toml file
+  @param  key     dependency project state
+  @return FMK_ERR_NONE or FMK_ERR_CUSTOM
+*///-----------------------------------------------------------------------------------------------
+fmkErr_t FlyMakeTomlCheckString(flyMakeState_t *pState, tomlKey_t *pKey)
+{
+  fmkErr_t  err = FMK_ERR_NONE;
+  if(pKey->type != TOML_STRING)
+    err = FlyMakeErrToml(pState, pKey->szValue, "expected string");
+  return err;
 }
 
 /*--------------------------------------------------------------------------------------------------
@@ -319,6 +333,32 @@ void FlyMakeCompilerListPrint(const flyMakeCompiler_t *pCompilerList)
 }
 
 /*--------------------------------------------------------------------------------------------------
+  Allocate a formatted string
+
+  @param    szFmt   e.g. "-g -DDEBUG={n}"
+  @param    nDebug  the value fo {n}
+  @return   allocated string, e.g. "-g -DDEBUG=2"
+*///-----------------------------------------------------------------------------------------------
+char * FmkAllocCcDbg(const char *szFmt, unsigned n)
+{
+  const char          szMarker[] = "{n}";
+  char               *szDebug = NULL;
+  char                szN[12];
+  unsigned            size;
+
+  size = strlen(szFmt) + (FlyStrCount(szFmt, szMarker) * sizeof(szN));
+  szDebug = FlyAlloc(size);
+  if(szDebug)
+  {
+    snprintf(szN, sizeof(szN), "%u", n);
+    FlyStrZCpy(szDebug, szFmt, size);
+    FlyStrReplace(szDebug, size, szMarker, szN, FLYSTR_REP_ALL);
+  }
+
+  return szDebug;
+}
+
+/*--------------------------------------------------------------------------------------------------
   Creates default list for C and C++. flymake.toml may override some or all the fields.
 
   The compiler list defines how to compile and link source code into programs and libraries.
@@ -329,7 +369,7 @@ void FlyMakeCompilerListPrint(const flyMakeCompiler_t *pCompilerList)
 
   @return  ptr to allocated compiler list for default supported languages and options (C and C++)
 *///-----------------------------------------------------------------------------------------------
-flyMakeCompiler_t * FlyMakeCompilerListDefault(void)
+flyMakeCompiler_t * FlyMakeCompilerListDefault(flyMakeState_t *pState)
 {
   flyMakeCompiler_t *pCompilerList = NULL;
   flyMakeCompiler_t *pCompiler;
@@ -339,62 +379,29 @@ flyMakeCompiler_t * FlyMakeCompilerListDefault(void)
   if(pCompiler)
   {
     pCompilerList = pCompiler;
-    pCompiler->szCc     = FlyStrClone(m_szDefCc);     // "cc {in} -c {incs}{warn}{debug}-o {out}"
-    pCompiler->szLl     = FlyStrClone(m_szDefLl);     // "cc {in} {libs}{debug}-o {out}"
-    pCompiler->szInc    = FlyStrClone(m_szDefInc);    // "-I";
-    pCompiler->szWarn   = FlyStrClone(m_szDefWarn);   // "-Wall -Werror";
-    pCompiler->szCcDbg  = FlyStrClone(m_szDefCcDbg);  // "-g -DDEBUG=1";
-    pCompiler->szLlDbg  = FlyStrClone(m_szDefLlDbg);  // "-g";
+    pCompiler->szCc     = FlyStrClone(m_szDefCc);             // "cc {in} -c {incs}{warn}{debug}-o {out}"
+    pCompiler->szLl     = FlyStrClone(m_szDefLl);             // "cc {in} {libs}{debug}-o {out}"
+    pCompiler->szInc    = FlyStrClone(m_szDefInc);            // "-I"
+    pCompiler->szWarn   = FlyStrClone(m_szDefWarn);           // "-Wall -Werror"
+    pCompiler->szCcDbg  = FmkAllocCcDbg(m_szDefCcDbg, pState->opts.dbg);  // "-g -DDEBUG=1"
+    pCompiler->szLlDbg  = FlyStrClone(m_szDefLlDbg);          // "-g"
 
     // create default C++ compiler structure
     pCompiler = FmkCompilerNew(m_szCppExts);
     if(pCompiler)
     {
       pCompilerList->pNext = pCompiler;
-      pCompiler->szCc     = FlyStrClone(m_szCppDefCc);    // "c++ {in} -c {incs}{warn}{debug}-o {out}"
-      pCompiler->szCcDbg  = FlyStrClone(m_szDefCcDbg);    // "-g -DDEBUG=1";
-      pCompiler->szInc    = FlyStrClone(m_szDefInc);      // "-I";
-      pCompiler->szWarn   = FlyStrClone(m_szDefWarn);     // "-Wall -Werror";
-      pCompiler->szLl     = FlyStrClone(m_szCppDefLl);    // "c++ {in} {libs}{debug}-o {out}"
-      pCompiler->szLlDbg  = FlyStrClone(m_szDefLlDbg);    // "-g";
+      pCompiler->szCc     = FlyStrClone(m_szCppDefCc);        // "c++ {in} -c {incs}{warn}{debug}-o {out}"
+      pCompiler->szLl     = FlyStrClone(m_szCppDefLl);        // "c++ {in} {libs}{debug}-o {out}"
+      pCompiler->szInc    = FlyStrClone(m_szDefInc);          // "-I"
+      pCompiler->szWarn   = FlyStrClone(m_szDefWarn);         // "-Wall -Werror"
+      pCompiler->szCcDbg  = FmkAllocCcDbg(m_szDefCcDbg, pState->opts.dbg);  //"-g -DDEBUG=1"
+      pCompiler->szLlDbg  = FlyStrClone(m_szDefLlDbg);        // "-g";
     }
   }
 
   return pCompilerList;
 }
-
-#if 0
-/*-------------------------------------------------------------------------------------------------
-  Convert from {markers} to %s
-
-  This will either ammend an existing flyMakeCompiler_t, or prepend a new one to the list.
-
-  @param  sz          string to check for markers
-  @param  aMarkers    an array of markers
-  @param  n  
-  @return the modified string
-*///-----------------------------------------------------------------------------------------------
-static char * FmkConvertMarkers(char *szStr, fmkMarker_t *aMarkers, unsigned n)
-{
-  char     *psz;
-  unsigned  len;
-  unsigned  i;
-
-   // mark of all markers found
-  for(i = 0; i < n; ++i)
-  {
-    psz = strstr(szStr, aMarkers[i].szMarker);
-    if(psz)
-    {
-      len = strlen(aMarkers[i].szMarker);
-      memmove(&psz[2], &psz[len], strlen(&psz[len]) + 1);
-      memcpy(psz, "%s", 2);
-    }
-  }
-
-  return szStr;
-}
-#endif
 
 /*-------------------------------------------------------------------------------------------------
   Converts a space separate list of folders to an allocated list of include options.
@@ -683,8 +690,7 @@ fmkErr_t FmkTomlProcessCompilerKey(flyMakeState_t *pState, tomlKey_t *pKey)
   // if not an inline table, then there can't be keys
   if(FlyTomlType(pKey->szValue) != TOML_INLINE_TABLE)
   {
-    FlyMakeErrToml(pState, key.szValue, "Expected TOML inline table");
-    err = FMK_ERR_CUSTOM;
+    err = FlyMakeErrToml(pState, key.szValue, "expected inline table");
   }
 
   // get the key in string form
@@ -712,11 +718,10 @@ fmkErr_t FmkTomlProcessCompilerKey(flyMakeState_t *pState, tomlKey_t *pKey)
     szIter = FlyTomlKeyIter(pKey->szValue, &key);
     while(szIter && !err)
     {
-      if(key.type != TOML_STRING)
-      {
-        FlyMakeErrToml(pState, key.szValue, "Expected string");
-        err = FMK_ERR_CUSTOM;
-      }
+      // verify value of this key is a string, as they all must be
+      err = FlyMakeTomlCheckString(pState, &key);
+      if(err)
+        break;
 
       // process each key
       szValue = FlyMakeTomlStrAlloc(key.szValue);
@@ -729,8 +734,7 @@ fmkErr_t FmkTomlProcessCompilerKey(flyMakeState_t *pState, tomlKey_t *pKey)
       {
         if(!FmkTomlCheckMarkers(szValue, aMarkersCompile, NumElements(aMarkersCompile)))
         {
-          FlyMakeErrToml(pState, key.szValue, szTomlCompileErr);
-          err = FMK_ERR_CUSTOM;
+          err = FlyMakeErrToml(pState, key.szValue, szTomlCompileErr);
         }
         else
         {
@@ -744,8 +748,7 @@ fmkErr_t FmkTomlProcessCompilerKey(flyMakeState_t *pState, tomlKey_t *pKey)
       {
         if(!FmkTomlCheckMarkers(szValue, aMarkersLink, NumElements(aMarkersLink)))
         {
-          FlyMakeErrToml(pState, key.szValue, szTomlLinkErr);
-          err = FMK_ERR_CUSTOM;
+          err = FlyMakeErrToml(pState, key.szValue, szTomlLinkErr);
         }
         else
         {
@@ -758,7 +761,7 @@ fmkErr_t FmkTomlProcessCompilerKey(flyMakeState_t *pState, tomlKey_t *pKey)
       else if(strcmp(szKey, m_szKeyCcDbg) == 0)
       {
         FlyStrFreeIf(pCompiler->szCcDbg);
-        pCompiler->szCcDbg = FmkAddSpace(szValue);
+        pCompiler->szCcDbg = FmkAddSpace(FmkAllocCcDbg(szValue, pState->opts.dbg));
       }
 
       // ll_dbg= "-g "
@@ -787,11 +790,10 @@ fmkErr_t FmkTomlProcessCompilerKey(flyMakeState_t *pState, tomlKey_t *pKey)
     }
   }
 
-  // at a minimum, need at least 
+  // if making a new entry, it must have the ability to compile and link
   if(!pCompiler->szCc || !pCompiler->szLl)
   {
-    FlyMakeErrToml(pState, pKey->szValue, "Keys cc=, ll= are required");
-    err = FMK_ERR_CUSTOM;
+    err = FlyMakeErrToml(pState, pKey->szValue, "keys cc=, ll= are required");
   }
 
   // optional fields will be filled in with C defaults if not set
@@ -827,22 +829,27 @@ bool_t FmkTomlProcessPackage(flyMakeState_t *pState, const char *szName)
   tomlKey_t       key;
   bool_t          fWorked     = TRUE;
 
-  // determine project name, which may be provided in flymake.toml file
+  // determine project name
   if(szName)
     pState->szProjName = FlyStrClone(szName);
   else if(pState->szTomlFile)
   {
-    if(FlyTomlKeyPathFind(pState->szTomlFile, "package:name", &key) && key.type == TOML_STRING)
+    if(FlyTomlKeyPathFind(pState->szTomlFile, "package:name", &key))
     {
-      projNameLen = FlyTomlStrLen(key.szValue);
-      pState->szProjName = FlyAlloc(projNameLen + 1);
-      if(pState->szProjName == NULL)
-      {
-        FlyMakeErrMem();
+      if(FlyMakeTomlCheckString(pState, &key) != FMK_ERR_NONE)
         fWorked = FALSE;
-      }
       else
-        FlyTomlStrCpy(pState->szProjName, key.szValue, projNameLen + 1);
+      {
+        projNameLen = FlyTomlStrLen(key.szValue);
+        pState->szProjName = FlyAlloc(projNameLen + 1);
+        if(pState->szProjName == NULL)
+        {
+          FlyMakeErrMem();
+          fWorked = FALSE;
+        }
+        else
+          FlyTomlStrCpy(pState->szProjName, key.szValue, projNameLen + 1);
+      }
     }
   }
 
@@ -863,53 +870,20 @@ bool_t FmkTomlProcessPackage(flyMakeState_t *pState, const char *szName)
     }
   }
 
-#if 0
-  // create library name if there is one, e.g. "../lib/foo.a"
-  if(fWorked && pState->szLib)
-  {
-    // e.g. ../lib/projname.a
-    pState->szLibName  = FlyAlloc(strlen(pState->szLib) + strlen(pState->szProjName) + 8);
-    if(!pState->szLibName)
-    {
-      FlyMakeErrMem();
-      fWorked = FALSE;
-    }
-    else
-    {
-      strcpy(pState->szLibName, pState->szLib);
-      strcat(pState->szLibName, pState->szProjName);
-      strcat(pState->szLibName, ".a");
-    }
-  }
-
-  // create source name if there is one, e.g. "src/foo"
-  if(fWorked && pState->szSrc)
-  {
-    // e.g. ../lib/projname.a
-    pState->szSrcName  = FlyAlloc(strlen(pState->szSrc) + projNameLen + 1);
-    if(!pState->szSrcName)
-    {
-      FlyMakeErrMem();
-      fWorked = FALSE;
-    }
-    else
-    {
-      strcpy(pState->szSrcName, pState->szSrc);
-      strcat(pState->szSrcName, pState->szProjName);
-    }
-  }
-#endif
-
   // find package:version, defaults to "*"
   if(fWorked)
   {
-    if(pState->szTomlFile &&
-      FlyTomlKeyPathFind(pState->szTomlFile, "package:version", &key) && key.type == TOML_STRING)
+    if(pState->szTomlFile && FlyTomlKeyPathFind(pState->szTomlFile, "package:version", &key))
     {
-      size = FlyTomlStrLen(key.szValue) + 1;
-      pState->szProjVer = FlyAlloc(size);
-      if(pState->szProjVer)
-        FlyTomlStrCpy(pState->szProjVer, key.szValue, size);
+      if(FlyMakeTomlCheckString(pState, &key) != FMK_ERR_NONE)
+        fWorked = FALSE;
+      else
+      {      
+        size = FlyTomlStrLen(key.szValue) + 1;
+        pState->szProjVer = FlyAlloc(size);
+        if(pState->szProjVer)
+          FlyTomlStrCpy(pState->szProjVer, key.szValue, size);
+      }
     }
     if(pState->szProjVer == NULL)
       pState->szProjVer = FlyStrClone("*");
@@ -1116,14 +1090,25 @@ char * FlyMakeFolderAllocLibName(flyMakeState_t *pState, const char *szFolder)
   unsigned    len        = 0;
   unsigned    size;
 
-  psz = FlyStrPathNameLast(szFolder, &len);
-  for(i = 0; i < NumElements(m_aszLib); ++i)
+  // simple libs always have the project name
+  if(pState->fIsSimple)
   {
-    if(strcmp(psz, m_aszLib[i]) == 0)
+    psz = pState->szProjName;
+    len = strlen(psz);
+  }
+
+  // otherwise, use folder name, unless default lib folder name
+  else
+  {
+    psz = FlyStrPathNameLast(szFolder, &len);
+    for(i = 0; i < NumElements(m_aszLib); ++i)
     {
-      psz = pState->szProjName;
-      len = strlen(psz);
-      break;
+      if(strcmp(psz, m_aszLib[i]) == 0)
+      {
+        psz = pState->szProjName;
+        len = strlen(psz);
+        break;
+      }
     }
   }
 
@@ -1161,14 +1146,24 @@ char * FlyMakeFolderAllocSrcName(flyMakeState_t *pState,const char *szFolder)
   unsigned    len        = 0;
   unsigned    size;
 
-  psz = FlyStrPathNameLast(szFolder, &len);
-  for(i = 0; i < NumElements(m_aszSrc); ++i)
+  // simple libs always have the project name
+  if(pState->fIsSimple)
   {
-    if(strcmp(psz, m_aszSrc[i]) == 0)
+    psz = pState->szProjName;
+    len = strlen(psz);
+  }
+
+  else
+  {
+    psz = FlyStrPathNameLast(szFolder, &len);
+    for(i = 0; i < NumElements(m_aszSrc); ++i)
     {
-      psz = pState->szProjName;
-      len = strlen(psz);
-      break;
+      if(strcmp(psz, m_aszSrc[i]) == 0)
+      {
+        psz = pState->szProjName;
+        len = strlen(psz);
+        break;
+      }
     }
   }
 
@@ -1207,6 +1202,7 @@ bool_t FmkTomlProcessFolders(flyMakeState_t *pState)
   void             *hList     = NULL;
   int               pos;
   unsigned          i, j;
+  fmkRule_t         rule;
   bool_t            fWorked   = TRUE;
 
   FlyAssert(pState && pState->szRoot);
@@ -1224,7 +1220,7 @@ bool_t FmkTomlProcessFolders(flyMakeState_t *pState)
       // if value is not a string, invalid
       if(key.type != TOML_STRING)
       {
-        FlyMakeErrToml(pState, key.szValue, m_szFolderNotStr);
+        FlyMakeErrToml(pState, key.szValue, m_szRuleInvalid);
         fWorked = FALSE;
         break;
       }
@@ -1305,23 +1301,25 @@ bool_t FmkTomlProcessFolders(flyMakeState_t *pState)
   if(pState->pFolderList == NULL)
   {
     hList = FlyMakeSrcListNew(pState->pCompilerList, pState->szRoot, 0);
-    if(hList)
+    if(FlyMakeSrcListLen(hList) > 0)
     {
-      if(FlyMakeSrcListLen(hList) >= 0)
+      pState->fIsSimple = TRUE;
+      pFolder = FlyAllocZ(sizeof(*pFolder));
+      if(!pFolder)
       {
-        pState->fIsSimple = TRUE;
-        pFolder = FlyAllocZ(sizeof(*pFolder));
-        if(!pFolder)
-        {
-          FlyMakeErrMem();
-          fWorked = FALSE;
-        }
-        else
-        {
-          pFolder->szFolder = FlyStrClone(pState->szRoot);
-          pFolder->rule = FMK_RULE_LIB;
-          pState->pFolderList = FlyListAppend(pState->pFolderList, pFolder);
-        }
+        FlyMakeErrMem();
+        fWorked = FALSE;
+      }
+      else
+      {
+        rule = FMK_RULE_LIB;
+        if(pState->opts.fRulesSrc)
+          rule  = FMK_RULE_SRC;
+        else if(pState->opts.fRulesTools)
+          rule  = FMK_RULE_TOOL;
+        pFolder->szFolder = FlyStrClone(pState->szRoot);
+        pFolder->rule = rule;
+        pState->pFolderList = FlyListAppend(pState->pFolderList, pFolder);
       }
       FlyFileListFree(hList);
     }

@@ -208,8 +208,9 @@ static int FmkCompileFile(flyMakeState_t *pState, const char *szOutFolder, const
   int                 ret           = 0;
   sFlyFileInfo_t      info;
 
+  ++pState->nSrcFiles;
   if(FlyMakeDebug() >= FMK_DEBUG_MORE)
-    FlyMakePrintf("FmkCompileFile(out=%s, file=%s)\n", szOutFolder, szFileName);
+    FlyMakePrintf("FmkCompileFile(out=%s, file=%s), nSrcFiles %u\n", szOutFolder, szFileName, pState->nSrcFiles);
 
   // e.g. "cc %s -c %s%s%s-o %s" where %s is: {in} {incs} {warn} {cc_dbg} {out}
   // the file list should only contain known file extenstions, so this should always succeed
@@ -335,7 +336,7 @@ static bool_t FmkCompileFolder(flyMakeState_t *pState, const char *szFolder, uns
   if(FlyMakeDebug())
     FlyMakePrintf("FmkCompileFolder(%s)\n", szFolder);
 
-  hSrcList = FlyMakeSrcListNew(pState->pCompilerList, szFolder, pState->fIsSimple ? 0 : FMK_SRC_DEPTH);
+  hSrcList = FlyMakeSrcListNew(pState->pCompilerList, szFolder, FlyMakeStateDepth(pState));
   if(hSrcList && FlyMakeSrcListLen(hSrcList) > 0)
   {
     // allocate the output folder
@@ -797,7 +798,7 @@ static bool_t FlyMakeBuildTools(flyMakeState_t *pState, const char *szFolder, co
   // make out folder, e.g. "tools/out/", if needed
   if(ret >= 0 && pToolList->nTools)
   {
-    FlyAssert(FlyStrPathIsFolder(szFolder));
+    FlyAssert(szFolder);
     FlyStrZCpy(szOutFolder, szFolder, size);
     FlyStrPathAppend(szOutFolder, m_szOutFolder, size);
     if(!FlyMakeFolderCreate(&pState->opts, szOutFolder))
@@ -1103,9 +1104,8 @@ static fmkErr_t FmkDepVersionValidate(
   pDep = FmkDepFind(pDepKeys->pRootState->pDepList, szDepName);
   if(pDep && !FlySemVerMatch(szRange, pDep->szVer))
   {
-    FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyInc.szValue, "Version Conflict");
+    err = FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyInc.szValue, "version conflict");
     FlyMakePrintf("  Previous version %s\n", pDep->szVer);
-    err = FMK_ERR_CUSTOM;
   }
   *ppDep = pDep;
 
@@ -1170,16 +1170,14 @@ static fmkErr_t FmkDepPackageValidate(
   if(!err && !FlyMakeTomlRootFill(pState, szFolder))
   {
     szValue = pDepKeys->keyGit.szValue ? pDepKeys->keyGit.szValue : pDepKeys->keyPath.szValue;
-    FlyMakeErrToml(pDepKeys->pState, szValue, "folder not a project");
-    err = FMK_ERR_CUSTOM;
+    err = FlyMakeErrToml(pDepKeys->pState, szValue, "folder not a project");
   }
 
   // validate flymake.toml and allocate things like the name
   if(!err && !FlyMakeTomlAlloc(pState, szDepName))
   {
     FlyAssert(szValue);
-    FlyMakeErrToml(pDepKeys->pState, szValue, "invalid flymake.toml file");
-    err = FMK_ERR_CUSTOM;
+    err = FlyMakeErrToml(pDepKeys->pState, szValue, "invalid flymake.toml file");
   }
 
   // fixup project version
@@ -1194,8 +1192,7 @@ static fmkErr_t FmkDepPackageValidate(
   if(!err && !FlyMakeFolderFindByRule(pState->pFolderList, FMK_RULE_LIB))
   {
     FlyMakeStatePrint(pState);
-    FlyMakeErrToml(pDepKeys->pState, szValue, "project cannot be built as library");
-    err = FMK_ERR_CUSTOM;
+    err = FlyMakeErrToml(pDepKeys->pState, szValue, "project cannot be built as library");
   }
 
   // failed, free state
@@ -1518,8 +1515,7 @@ static fmkErr_t FmkDepPackageClone(
     // don't specify both version and sha
     if(szRange && szSha)
     {
-      FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyVer.szValue, "cannot specify both version and sha");
-      err = FMK_ERR_CUSTOM;        
+      err = FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyVer.szValue, "cannot specify both version and sha");
     }
 
     // user has specified version range or SHA. Find them.
@@ -1540,16 +1536,14 @@ static fmkErr_t FmkDepPackageClone(
           szVer = FmkDepVersionFind(&pDepKeys->pRootState->opts, szRange, &szSha);
           if(!szSha)
           {
-            FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyVer.szValue, "version not found");
-            err = FMK_ERR_CUSTOM;
+            err = FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyVer.szValue, "version not found");
           }
         }
 
         // have a SHA, use it
         if(szSha && !FmkDepCheckoutSha(&pDepKeys->pRootState->opts, szSha))
         {
-          FlyMakeErrToml(pDepKeys->pState, pDepKeys->keySha.szValue, "SHA not found");
-          err = FMK_ERR_CUSTOM;
+          err = FlyMakeErrToml(pDepKeys->pState, pDepKeys->keySha.szValue, "SHA not found");
         }
 
         // back to our original folder
@@ -1610,17 +1604,15 @@ static fmkErr_t FmkDepProcessPrebuilt(fmkDepKeys_t *pDepKeys)
   if(!err && !FlyFileExistsFolder(szIncFolder))
   {
     FlyMakePrintfEx(FMK_VERBOSE_SOME, "\n");
-    FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyInc.szValue, "Include folder not found");
-    err = FMK_ERR_CUSTOM;
+    err = FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyInc.szValue, "include folder not found");
   }
 
   // path must point to valid prebuilt library file, e.g. "../project/lib/project.a"
   if(!err && !FlyFileExistsFile(szLibFile))
   {
     FlyMakePrintfEx(FMK_VERBOSE_SOME, "\n");
-    FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyPath.szValue, "Library not found");
-    err = FMK_ERR_CUSTOM;
-  }
+    err = FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyPath.szValue, "library not found");
+  } 
 
   // don't allow same dep name with different folders
   if(!err)
@@ -1631,9 +1623,8 @@ static fmkErr_t FmkDepProcessPrebuilt(fmkDepKeys_t *pDepKeys)
       if(!FlyFileIsSamePath(szIncFolder, pDep->szIncFolder))
       {
         FlyMakePrintfEx(FMK_VERBOSE_SOME, "\n");
-        FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyInc.szValue, "Duplicate dependency, different inc/ folder");
-        FlyMakePrintf("  Previous include folder: %s\n", pDep->szIncFolder);
-        err = FMK_ERR_CUSTOM;
+        err = FlyMakeErrToml(pDepKeys->pState, pDepKeys->keyInc.szValue, "duplicate dependency, different includer folder");
+        FlyMakePrintf("  previous include folder: %s\n", pDep->szIncFolder);
       }
     }
   }
@@ -1817,26 +1808,6 @@ static fmkErr_t FmkDepProcessGit(fmkDepKeys_t *pDepKeys)
 }
 
 /*-------------------------------------------------------------------------------------------------
-  Check the type. Should be string. If not, return error, set error message
-
-  @param  pState        state with flymake.toml file
-  @param  key     dependency project state
-  @return FMK_ERR_NONE or FMK_ERR_CUSTOM
-*///-----------------------------------------------------------------------------------------------
-static fmkErr_t FmkDepKeyCheckString(flyMakeState_t *pState, tomlKey_t *pKey)
-{
-  fmkErr_t  err = FMK_ERR_NONE;
-
-  if(pKey->type != TOML_STRING)
-  {
-    FlyMakeErrToml(pState, pKey->szValue, "Expected string");
-    err = FMK_ERR_CUSTOM;
-  }
-
-  return err;
-}
-
-/*-------------------------------------------------------------------------------------------------
   Recursively process flymake.toml `[dependencies]`. Results in pRootState->pDepList filled in.
 
   Also updates pRootState->libs and pState->incs.
@@ -1897,7 +1868,7 @@ static fmkErr_t FmkDepProcessToml(flyMakeState_t *pRootState, flyMakeState_t *pS
     // every dependency must be a TOML inline table, e.g. foo = { "path" = "../foo/" }
     if(depKeys.keyDep.type != TOML_INLINE_TABLE)
     {
-      FlyMakeErrToml(pState, depKeys.keyDep.szValue, "Expected inline table");
+      FlyMakeErrToml(pState, depKeys.keyDep.szValue, "expected inline table");
       err = FMK_ERR_CUSTOM;
       break;
     }
@@ -1907,7 +1878,7 @@ static fmkErr_t FmkDepProcessToml(flyMakeState_t *pRootState, flyMakeState_t *pS
     for(i = 0; !err && i < NumElements(aKeyVal); ++i)
     {
       if(FlyTomlKeyFind(pszInlineTable, aKeyVal[i].szKey, aKeyVal[i].pKey))
-        err = FmkDepKeyCheckString(pState, aKeyVal[i].pKey);
+        err = FlyMakeTomlCheckString(pState, aKeyVal[i].pKey);
     }
 
     // print out keys found, all on one line
@@ -1932,17 +1903,20 @@ static fmkErr_t FmkDepProcessToml(flyMakeState_t *pRootState, flyMakeState_t *pS
 
     // must have either a path= or git= key
     if(!depKeys.keyGit.szValue && !depKeys.keyPath.szValue)
-      FlyMakeErrToml(pState, pszInlineTable, "Expected \"path=\" or \"git=\" key in inline table");
-    pDep = FmkDepTomlFind(pRootState->pDepList, depKeys.keyDep.szKey);
+      err = FlyMakeErrToml(pState, pszInlineTable, "expected \"path=\" or \"git=\" key in inline table");
 
-    if(pDep)
-      FmkDepAddIncLibs(&depKeys, pDep->szIncFolder, NULL);
-    else if(depKeys.keyGit.szValue)
-      err = FmkDepProcessGit(&depKeys);
-    else if(depKeys.keyInc.szValue && depKeys.keyPath.szValue)
-      err = FmkDepProcessPrebuilt(&depKeys);
-    else
-      err = FmkDepProcessPackage(&depKeys);
+    if(!err)
+    {
+      pDep = FmkDepTomlFind(pRootState->pDepList, depKeys.keyDep.szKey);
+      if(pDep)
+        FmkDepAddIncLibs(&depKeys, pDep->szIncFolder, NULL);
+      else if(depKeys.keyGit.szValue)
+        err = FmkDepProcessGit(&depKeys);
+      else if(depKeys.keyInc.szValue && depKeys.keyPath.szValue)
+        err = FmkDepProcessPrebuilt(&depKeys);
+      else
+        err = FmkDepProcessPackage(&depKeys);
+    }
 
     // look for next dependency
     pszIter = FlyTomlKeyIter(pszIter, &depKeys.keyDep);

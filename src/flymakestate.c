@@ -67,7 +67,7 @@ bool_t FlyMakeIsState(const flyMakeState_t *pState)
 *///-----------------------------------------------------------------------------------------------
 unsigned FlyMakeStateDepth(const flyMakeState_t *pState)
 {
-  return pState->fIsSimple ? 1 : FMK_SRC_DEPTH;
+  return pState->fIsSimple ? 0 : FMK_SRC_DEPTH;
 }
 
 /*-------------------------------------------------------------------------------------------------

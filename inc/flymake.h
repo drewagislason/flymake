@@ -25,7 +25,7 @@
 #define FMK_SZ_OUT            "out/"
 #define FMK_SZ_DEP_DIR        "deps/"
 #define FMK_SZ_FLYMAKE_TOML   "flymake.toml"
-#define FMK_SZ_VERSION        "1.0"
+#define FMK_SZ_VERSION        "1.0.1"
 #define FMK_SRC_DEPTH         3
 
 typedef struct
@@ -42,6 +42,7 @@ typedef struct
   bool_t  fRulesTools;  // -rt, use tools/ rules to build target files/folders
   int     verbose;      // -v, default verbose
   bool_t  fWarning;     // -w- turns of warnings as errors (no -Werror)
+  bool_t  fUserGuide;   // --user-guide, prints users guide
 } flyMakeOpts_t;
 
 typedef enum
@@ -184,6 +185,7 @@ typedef struct flyMakeState
 
   // statistics
   unsigned            nCompiled;
+  unsigned            nSrcFiles;
 } flyMakeState_t;
 
 // flymake.c
@@ -198,6 +200,7 @@ void               *FlyMakeStateFree            (flyMakeState_t *pState);
 bool_t              FlyMakeIsState              (const flyMakeState_t *pState);
 void                FlyMakeStatePrint           (const flyMakeState_t *pState);
 void                FlyMakeStatePrintEx         (const flyMakeState_t *pState, bool_t fVerbose);
+unsigned            FlyMakeStateDepth           (const flyMakeState_t *pState);
 
 // flymakeclean.c
 bool_t              FlyMakeCleanFiles           (flyMakeState_t *pState);
@@ -242,11 +245,12 @@ int                 FlyMakePrintfEx             (fmkVerbose_t level, const char 
 int                 FlyMakeDbgPrintf            (fmkDebug_t level, const char *szFormat, ...);
 void                FlyMakePrintErr             (fmkErr_t err, const char *szExtra);
 fmkErr_t            FlyMakeErrMem               (void);
-void                FlyMakeErrToml              (const flyMakeState_t *pState, const char *szToml, const char *szErr);
+fmkErr_t            FlyMakeErrToml              (const flyMakeState_t *pState, const char *szToml, const char *szErr);
 
 // flymaketoml.c
 char               *FlyMakeTomlKeyAlloc         (const char *szTomlKey);
 char               *FlyMakeTomlStrAlloc         (const char *szTomlStr);
+fmkErr_t            FlyMakeTomlCheckString      (flyMakeState_t *pState, tomlKey_t *pKey);
 char               *FlyMakeTomlRootFind         (const char *szPath, const flyMakeCompiler_t *pCompilerList, fmkErr_t *pErr);
 bool_t              FlyMakeTomlRootFill         (flyMakeState_t *pState, const char *szRootFolder);
 bool_t              FlyMakeTomlAlloc            (flyMakeState_t *pState, const char *szName);
@@ -261,7 +265,7 @@ void                FlyMakeFolderPrint          (const flyMakeFolder_t *pFolder)
 void                FlyMakeFolderListPrint      (const flyMakeFolder_t *pFolderList);
 flyMakeFolder_t *   FlyMakeFolderFindByRule     (const flyMakeFolder_t *pFolderList, fmkRule_t rule);
 flyMakeFolder_t *   FlyMakeFolderFindByName     (const flyMakeFolder_t *pFolderList, const char *szRoot, const char *szName);
-flyMakeCompiler_t  *FlyMakeCompilerListDefault  (void);
+flyMakeCompiler_t  *FlyMakeCompilerListDefault  (flyMakeState_t *pState);
 void                FlyMakeCompilerPrint        (const flyMakeCompiler_t *pCompiler);
 void                FlyMakeCompilerListPrint    (const flyMakeCompiler_t *pCompilerList);
 char               *FlyMakeCompilerAllExts      (const flyMakeCompiler_t *pCompilerList);
@@ -285,6 +289,7 @@ bool_t              FlyMakeCompilerFmtLink      (flyStrSmart_t *pStr,
 extern const char   g_szTomlFile[];
 extern const char   g_szFmtArchive[];
 extern const char   m_szFmkBanner[];
+extern const char   g_szFlyMakeUserGuide[];
 
 // allows source to be compiled with gcc or g++ compilers
 #ifdef __cplusplus

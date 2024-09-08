@@ -1,6 +1,6 @@
 # flymake User Manual
 
-Version 1.0, August 31, 2024
+Version 1.0.1
 
 Inspired by Rust's Cargo, flymake is a C/C++ project build, test and package manager, all in one.
 
@@ -319,18 +319,36 @@ version = "0.1.0"
 While not mandatory, the `[package]` section provides the project or package version and name, and
 should be included for all projects.
 
-The `name=` field is the name of the project, which can be different than the name of the folder
-that encapsulates it. However, if there is no `flymake.toml` or this field is not included, the
-name of the project is assumed to be the same as the enclosing folder.
+```
+[package]
+name = "my_project"
+version = "1.0"
+```
 
-The `version=` field must be "major.minor.patch", where major, minor and patch are a number.
+The `name=` field is the name of the project, which can be different than the name of the folder
+that encapsulates it. If there is no `flymake.toml` or this field is not included, the name of the
+project is assumed to be the same as the enclosing folder.
+
+The `version=` field is in the form of "major.minor.patch", where major, minor and patch are
+numbers, and constitutes the version of your project. Version "1" is assumed to be "1.0.0".
 
 For a discussion of versions, see semantic versioning <https://semver.org>.
 
 ### 4.2 - flymake.toml `[compiler]` Section
 
 The `[compiler]` section of flymake.toml specifies how to compile and link programs based on file
-extension.
+extension(s).
+
+As a simple example, say you want to compile and old C project using the ansi (aka c89) standard.
+Add the following line to the `[compiler]` section of flymake.toml.
+
+```
+[compiler]
+".c" = { cc="cc {in} -c -ansi {incs}{warn}{debug}-o {out}" }
+```
+
+Note that you only need to specify the compile `cc=` key in the inline table, as the other keys
+will continue to have their defaults. Only specify those fields you want to override.
 
 In theory, flymake could make programs out of any programming language. In practice, the compiler
 you are using must produce object files that can be added to a library (e.g. `lib.a`) file
@@ -358,16 +376,6 @@ TOML Key  | Definition            | Default
 `ll_dbg=` | link debug options    | "-g"
 `inc=`    | include option        | "-I"
 `warn=`   | warning options       | "-Wall -Werror"
-
-As a simple example, say you want to compile your C code using the ansi (aka c90) standard. Add the
-following line to the `[compiler]` section of flymake.toml.
-
-```
-".c" = { cc="cc {in} -c -ansi {incs}{warn}{debug}-o {out}" }
-```
-
-Note that you only need to specify the compile `cc=` key in the inline table, as the other keys
-will continue to have their defaults. Only specify those fields you want to override.
 
 For a discussion of C compiler versions, see <https://en.wikipedia.org/wiki/ANSI_C>  
 For a discussion of C++ compiler versions, see <https://en.wikipedia.org/wiki/C%2B%2B#History>  
@@ -885,7 +893,7 @@ Builds then runs programsExamples:
 
 ```
 $ flymake run                         # build and run src/myproj (main program)
-$ flymake run -D -B --rs folder/   # build and run folder/ program using source rules
+$ flymake run -D -B --rs folder/      # build and run folder/ program using source rules
 $ flymake run tools/foo -- --help     # run tools/foo --help
 $ flymake run tools/ -- --help        # run all tools with --help option
 ```

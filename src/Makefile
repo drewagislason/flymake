@@ -43,14 +43,6 @@ $(OUT)/%.o: %.c $(DEPS)
 	$(CC) $< $(CFLAGS) $@
 
 OBJ_FLYMAKE = \
-	$(OUT)/flymake.o \
-	$(OUT)/flymakeclean.o \
-	$(OUT)/flymakedep.o \
-	$(OUT)/flymakefolders.o \
-	$(OUT)/flymakelist.o \
-	$(OUT)/flymakeprint.o \
-	$(OUT)/flymakestate.o \
-	$(OUT)/flymaketoml.o \
 	$(OUT)/FlyAssert.o \
 	$(OUT)/FlyCli.o \
 	$(OUT)/FlyFile.o \
@@ -63,7 +55,16 @@ OBJ_FLYMAKE = \
 	$(OUT)/FlyStr.o \
 	$(OUT)/FlyStrZ.o \
 	$(OUT)/FlyToml.o \
-	$(OUT)/FlyUtf8.o
+	$(OUT)/FlyUtf8.o \
+	$(OUT)/flymake.o \
+	$(OUT)/flymakeclean.o \
+	$(OUT)/flymakedep.o \
+	$(OUT)/flymakelist.o \
+	$(OUT)/flymakenew.o \
+	$(OUT)/flymakeprint.o \
+	$(OUT)/flymakestate.o \
+	$(OUT)/flymaketoml.o \
+	$(OUT)/flymakeuserguide.o
 
 .PHONY: clean mkout SayAll SayDone
 
@@ -94,3 +95,6 @@ clean:
 # make the out folder
 mkout:
 	-if test ! -d $(OUT); then mkdir $(OUT); fi
+
+flymakeuserguide.c: ../docs/flymake_user_guide.md
+	file2c ../docs/flymake_user_guide.md flymakeuserguide.c g_szFlyMakeUserGuide

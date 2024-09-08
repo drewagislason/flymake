@@ -1,7 +1,17 @@
 [package]
 name = "flymake"
-version = "1.0"
+version = "1.0.1"
 
 [dependencies]
 flylibc = { git="git@github.com:drewagislason/flylibc.git" }
 # flylibc = { path="../flylibc/" }
+
+[folders]
+# lib = "--rl"
+# src = "--rs"
+# test = "--rt"
+# "deep/深い/folder/" = "--rs"
+
+[compiler]
+# ".c" = { cc="cc {in} -c {incs}{warn}{debug} -o {out}", ll="cc {in} {libs}{debug}-o {out}" }
+# ".cc.cpp.c++" = { cc="c++ {in} -c {incs}{warn}{debug} -o {out}", ll="c++ {in} {libs}{debug}-o {out}" }

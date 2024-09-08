@@ -42,18 +42,27 @@ void FmkDelToolsProg(flyMakeState_t *pState, const char *szFolder)
 
   @param  pState
 *///-----------------------------------------------------------------------------------------------
-void FmkDelProgOrLib(flyMakeOpts_t *pOpts, const char *szFolder, const char *szExt)
+void FmkDelProgOrLib(flyMakeState_t *pState, flyMakeFolder_t *pFolder)
 {
-  flyStrSmart_t  *pCmdline = FlyStrSmartAlloc(strlen(szFolder) + 42);
-  const char     *szName;
-  unsigned        len;
+  const char      szFmtDel[]  = "rm -f %s";
+  flyStrSmart_t  *pCmdline    = NULL;
+  char           *szName      = NULL;
 
+  if(pFolder->rule == FMK_RULE_LIB)
+    szName = FlyMakeFolderAllocLibName(pState, pFolder->szFolder);
+  else
+    szName = FlyMakeFolderAllocSrcName(pState, pFolder->szFolder);
+
+  if(szName)
+    pCmdline = FlyStrSmartAlloc(sizeof(szFmtDel) + strlen(szName));
   if(pCmdline)
   {
-    szName = FlyStrPathNameLast(szFolder, &len);
-    FlyStrSmartSprintf(pCmdline, "rm -f %s%.*s%s", szFolder, len, szName, szExt);
-    FlyMakeSystem(FMK_VERBOSE_SOME, pOpts, pCmdline->sz);
+    FlyStrSmartSprintf(pCmdline, szFmtDel, szName);
+    FlyMakeSystem(FMK_VERBOSE_SOME, &pState->opts, pCmdline->sz);
   }
+
+  FlyFreeIf(szName);
+  FlyStrSmartFree(pCmdline);  
 }
 
 /*-------------------------------------------------------------------------------------------------
@@ -85,13 +94,9 @@ bool_t FlyMakeCleanFiles(flyMakeState_t *pState)
     //
     if(pState->opts.fRebuild)
     {
-      // delete library
-      if(pFolder->rule == FMK_RULE_LIB)
-        FmkDelProgOrLib(&pState->opts, pFolder->szFolder, ".a");
-
-      // delete program
-      else if(pFolder->rule == FMK_RULE_SRC)
-        FmkDelProgOrLib(&pState->opts, pFolder->szFolder, "");
+      // delete program/library
+      if((pFolder->rule == FMK_RULE_LIB) || (pFolder->rule == FMK_RULE_SRC))
+        FmkDelProgOrLib(pState, pFolder);
 
       // delete tools
       else if(pFolder->rule == FMK_RULE_TOOL)
