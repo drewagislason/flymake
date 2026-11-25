@@ -719,7 +719,7 @@ The `[folders]` section in flymake.toml file specifies any special build rules p
 Otherwise, flymake builds `src/` and `source/` folders with the source rules, `lib/` and
 `library/` folders with library rules and `test/` with tool rules.
 
-For more details on the build rules, see [Section 6.1.1 - Build Rules]("#6.1.1-Build-Rules).
+For more details on the build rules, see [Section 6.1.1 - Build Rules]("#6.1.1-Build-Rules").
 
 The output of a build with `-B` or `--all` can be used to make a shell script that will compile
 your program. Just copy from the terminal window. All the lines that begin with `#` are comment
